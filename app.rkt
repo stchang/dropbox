@@ -45,4 +45,15 @@
                      #:size "m" #:exists 'replace)
 
 ;(upload-large-file "test-files/xmas.jpg" "xmas.jpg")
-(download-file "xmas.jpg" "xmas.jpg")
+#;(download-file "xmas.jpg" "xmas.jpg")
+;(get-copy-ref "xmas.jpg")
+;(copy "xmas.jpg" "xmas2.jpg")
+;(copy "xmas.jpg" "xmas2.jpg" #:copy-ref "DL38wjBoYW4xdnh2cGhmcA")
+;(copy "test" "test2")
+
+;(create-folder "new-folder")
+;(delete "new-folder")
+;(delete "test2")
+;(delete "xmas2.jpg")
+
+(move "xmas.jpg" "xmasss.jpg")

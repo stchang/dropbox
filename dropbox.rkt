@@ -5,6 +5,7 @@
 
 ;; TODO:
 ;; [o] = open, [x] = closed
+;;
 ;; [x] 2013-01-07: support locale
 ;; Add an optional parameter to functions of API calls that support
 ;; a locale parameter.
@@ -16,6 +17,7 @@
 ;; [o] 2013-01-07: abstract post-pure-port, get-pure-port, etc
 ;;                 so AUTHORIZATION-HEADER is not repeated
 ;; [o] 2013-01-07: create utility fn to build remote path
+;; [o] 2013-01-07: fix POST calls to not include params in url
 
 (require net/url
          net/uri-codec ; form-urlencoded->alist
@@ -48,6 +50,10 @@
          get-copy-ref
          get-image-thumbnail
          upload-large-file
+         copy
+         create-folder
+         delete
+         move
          )
 
 ;; ----------------------------------------------------------------------------
@@ -207,7 +213,8 @@
   jsexp)
 
 ;; ----------------------------------------------------------------------------
-;; functions to manipulate files
+;; functions to manipulate upload/download files
+;; and get metadata, revisions history, etc
 ;; ----------------------------------------------------------------------------
 (define (get-metadata path 
                       #:file-limit [file-limit 10000]
@@ -460,6 +467,74 @@
      (mk-api-content-url
       (string-append "commit_chunked_upload/" (get-root) "/" remote-filepath)
       params)
+     (bytes)
+     AUTHORIZATION-HEADER))
+  (define jsexp (read-json p))
+  (close-input-port p)
+  jsexp)
+
+;; ----------------------------------------------------------------------------
+;; file operations, ie copy, delete, move, etc
+;; ----------------------------------------------------------------------------
+
+;; copy file or folder
+(define (copy from to
+                   #:locale [locale DEFAULT-LOCALE]
+                   #:copy-ref [copy-ref #f])
+  (define params 
+    (if copy-ref
+        (format-params "root" (get-root)
+                                "from_path" ""
+                                "to_path" to
+                                "locale" locale
+                                "from_copy_ref" copy-ref)
+        (format-params "root" (get-root)
+                       "from_path" from
+                       "to_path" to
+                       "locale" locale)))
+  (define p
+    (post-pure-port
+     (mk-api-url "fileops/copy" params)
+     (bytes)
+     AUTHORIZATION-HEADER))
+  (define jsexp (read-json p))
+  (close-input-port p)
+  jsexp)
+
+(define (create-folder path #:locale [locale DEFAULT-LOCALE])
+  (define params (format-params "root" (get-root)
+                                "path" path
+                                "locale" locale))
+  (define p
+    (post-pure-port
+     (mk-api-url "fileops/create_folder" params)
+     (bytes)
+     AUTHORIZATION-HEADER))
+  (define jsexp (read-json p))
+  (close-input-port p)
+  jsexp)
+
+(define (delete path #:locale [locale DEFAULT-LOCALE])
+  (define params (format-params "root" (get-root)
+                                "path" path
+                                "locale" locale))
+  (define p 
+    (post-pure-port
+     (mk-api-url "fileops/delete" params)
+     (bytes)
+     AUTHORIZATION-HEADER))
+  (define jsexp (read-json p))
+  (close-input-port p)
+  jsexp)
+
+(define (move from to #:locale [locale DEFAULT-LOCALE])
+  (define params (format-params "root" (get-root)
+                                "from_path" from
+                                "to_path" to
+                                "locale" locale))
+  (define p
+    (post-pure-port
+     (mk-api-url "fileops/move" params)
      (bytes)
      AUTHORIZATION-HEADER))
   (define jsexp (read-json p))
