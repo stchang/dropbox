@@ -11,9 +11,38 @@
 ;; after granting access at url returned by get-authorization-url:
 #;(obtain-access-token)
 ;(get-account-info)
-;(get-metadata "lazyinf.pdf")
+#;(get-metadata "lazyinf.pdf")
 #;(upload-file "test-files/lazyinf.pdf" "lazyinf.pdf"
 ;             #:locale "pt-BR"
              #:overwrite? "false"
 ;             #:parent-rev "20ce7e933"
              )
+
+#;(download-file "lazyinf.pdf" "lazyinf.pdf" #:exists 'replace)
+
+#;(upload-file-post "test-files/lazyinf.pdf" "lazyinf.pdf"
+;             #:locale "pt-BR"
+             #:overwrite? "false"
+;             #:parent-rev "20ce7e933"
+             )
+#;(get-delta)
+#;(get-revisions "testing-revisions.txt")
+#;(restore-file "testing-revisions.txt" "110ce7e933")
+
+#;(upload-file "testing-revisions.txt" "testing-revisions.txt")
+
+;(search "" "test")
+;(search "" "txt")
+;(search "test" "pdf")
+
+;(get-share-url "test" #:short-url "false")
+;(get-media-url "lazyinf.pdf")
+
+#;(get-copy-ref "lazyinf.pdf")
+
+;(upload-file "test-files/maine.jpg" "maine.jpg")
+#;(get-image-thumbnail "maine.jpg" "maine-thumb.jpg" 
+                     #:size "m" #:exists 'replace)
+
+;(upload-large-file "test-files/xmas.jpg" "xmas.jpg")
+(download-file "xmas.jpg" "xmas.jpg")

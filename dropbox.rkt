@@ -5,9 +5,17 @@
 
 ;; TODO:
 ;; [o] = open, [x] = closed
-;; [o] 2013-01-07: support locale
+;; [x] 2013-01-07: support locale
 ;; Add an optional parameter to functions of API calls that support
 ;; a locale parameter.
+;; - DONE 2013-01-07
+;; [o] 2013-01-07: fix POST file uploading (ie upload-file-post function)
+;;     This is low priority since POST uploading is not recommended by
+;;     dropbox.
+;; [o] 2013-01-07: test full dropbox mode (ie - non-sandbox)
+;; [o] 2013-01-07: abstract post-pure-port, get-pure-port, etc
+;;                 so AUTHORIZATION-HEADER is not repeated
+;; [o] 2013-01-07: create utility fn to build remote path
 
 (require net/url
          net/uri-codec ; form-urlencoded->alist
@@ -29,6 +37,17 @@
          ;; files and metadata
          get-metadata
          upload-file
+         ;;upload-file-post
+         download-file
+         get-delta
+         get-revisions
+         restore-file
+         search
+         get-share-url
+         get-media-url
+         get-copy-ref
+         get-image-thumbnail
+         upload-large-file
          )
 
 ;; ----------------------------------------------------------------------------
@@ -47,21 +66,41 @@
 ;; ----------------------------------------------------------------------------
 ;; Utility functions
 ;; ----------------------------------------------------------------------------
+
 ;; returns a url to the specified dropbox api call
 ;; mk-api-url : string -> url
-(define (mk-api-url api-call)
-  (string->url (string-append "https://api.dropbox.com/1/" api-call)))
+(define (mk-api-url api-call [params #f])
+  (string->url 
+   (string-append "https://api.dropbox.com/1/" api-call 
+                  (if params
+                      (string-append "?" params)
+                      ""))))
 
 ;; returns a url to the specified dropbox api call
 ;; uses api-content.dropbox.com instead of api.dropbox
 ;; mk-api-content-url : string -> url
-(define (mk-api-content-url api-call)
-  (string->url (string-append "https://api-content.dropbox.com/1/" api-call)))
+(define (mk-api-content-url api-call [params #f])
+  (string->url 
+   (string-append "https://api-content.dropbox.com/1/" api-call 
+                  (if params
+                      (string-append "?" params)
+                      ""))))
 
 (define (get-root)
   (if (string=? ACCESS-TYPE "dropbox")
       "dropbox"
       "sandbox"))
+
+;; returns params formatted with = and &
+;; ie (format-params "param1" "val1" "param2" "val2")
+;;     => "param1=val1&param2=val2"
+;; format-params : -> string
+(define (format-params . args)
+  (cond [(null? args) ""]
+        [(null? (cddr args)) (string-append (car args) "=" (cadr args))]
+        [else (string-append (car args) "=" (cadr args) "&" 
+                             (apply format-params (cddr args)))]))
+      
 
 ;; ----------------------------------------------------------------------------
 ;; other constants
@@ -115,12 +154,10 @@
 ;; Step 2 of OAuth authentication process
 (define (get-authorization-url #:locale [locale DEFAULT-LOCALE] 
                                #:callback [callback-url AUTH-URL-BASE])
-  (string-append AUTH-URL-BASE
-                 "?"
-                 "oauth_token=" OAUTH-REQUEST-TOKEN "&"
-                 "oauth_callback=" callback-url "&"
-                 "locale=" locale
-                 ))
+  (define params (format-params "oauth_token" OAUTH-REQUEST-TOKEN
+                                "oauth_callback" callback-url
+                                "locale" locale))
+  (string-append AUTH-URL-BASE "?" params))
 
 ;; obtain access token from Dropbox API
 ;; Step 3 of OAuth authentication process
@@ -161,11 +198,9 @@
 ;; get-account-info : (void) -> jsexpr
 ;; returns a JSON expression (ie hash table) with account info
 (define (get-account-info #:locale [locale DEFAULT-LOCALE])
+  (define params (format-params "locale" locale))
   (define p (get-pure-port 
-             (mk-api-url 
-              (string-append "account/info"
-                             "?"
-                             "locale=" locale)) 
+             (mk-api-url "account/info" params) 
              AUTHORIZATION-HEADER))
   (define jsexp (read-json p))
   (close-input-port p)
@@ -174,31 +209,258 @@
 ;; ----------------------------------------------------------------------------
 ;; functions to manipulate files
 ;; ----------------------------------------------------------------------------
-(define (get-metadata path)
+(define (get-metadata path 
+                      #:file-limit [file-limit 10000]
+                      #:hash [hash ""]
+                      #:list [lst "true"]
+                      #:inc-del [inc-del "false"]
+                      #:rev [rev ""]
+                      #:local [locale DEFAULT-LOCALE])
+  (define params (format-params "file_limit" (number->string file-limit)
+                                "hash" hash
+                                "list" lst
+                                "include_deleted" inc-del
+                                "rev" rev
+                                "locale" locale))
   (define p
     (get-pure-port
-     (mk-api-url (string-append "metadata/" (get-root) "/" path))
+     (mk-api-url (string-append "metadata/" (get-root) "/" path)
+                 params)
      AUTHORIZATION-HEADER))
   (define jsexp (read-json p))
   (close-input-port p)
   jsexp)
 
+;; uses PUT to upload a file (recommended over upload-file-post)
 ;; remote-filepath should be a remote file name and NOT a directory
 ;; max filesize = 150mb
 (define (upload-file local-filepath remote-filepath 
                      #:locale [locale DEFAULT-LOCALE] 
                      #:overwrite? [overwrite? "true"]
                      #:parent-rev [parent-rev ""])
-  (define params (string-append 
-                  "locale=" locale "&"
-                  "overwrite=" overwrite? "&"
-                  "parent_rev=" parent-rev))
+  (define params (format-params "locale" locale
+                                "overwrite" overwrite?
+                                "parent_rev" parent-rev))
   (define p
     (put-pure-port
      (mk-api-content-url
-      (string-append "files_put/" (get-root) "/" remote-filepath
-                     "?" params))
+      (string-append "files_put/" (get-root) "/" remote-filepath)
+      params)
      (file->bytes local-filepath)
+     AUTHORIZATION-HEADER))
+  (define jsexp (read-json p))
+  (close-input-port p)
+  jsexp)
+
+;; uploads a file using POST 
+;; (not recommended -- use upload-file instead)
+;; remote-filepath should be a remote file name and NOT a directory
+;; max filesize = 150mb (use upload-large-file for > 150mb)
+;; TODO: this isn't working -- how to include parameters as part of request url
+;;       (must be signed like OAuth request URL)
+(define (upload-file-post local-filepath remote-filepath 
+                          #:locale [locale DEFAULT-LOCALE] 
+                          #:overwrite? [overwrite? "true"]
+                          #:parent-rev [parent-rev ""])
+  (define params (format-params 
+                  "locale" locale
+                  "overwrite" overwrite?
+;                  "parent_rev" parent-rev
+                  ))
+  (define p
+    (post-pure-port
+     (mk-api-content-url
+      (string-append "files/" (get-root) "/" remote-filepath)
+      params)
+     (file->bytes local-filepath)
+     AUTHORIZATION-HEADER))
+  (define jsexp (read-json p))
+  (close-input-port p)
+  jsexp)
+
+(define (download-file remote-filepath
+                       local-filepath
+                       #:rev [rev ""]
+                       #:exists [exists 'error])
+  (define params (format-params "rev" rev))
+  (define p
+    (get-pure-port
+     (mk-api-content-url
+      (string-append "files/" (get-root) "/" remote-filepath)
+                     params)
+     AUTHORIZATION-HEADER))
+  (define out (open-output-file local-filepath 
+                                #:mode 'binary
+                                #:exists exists))
+  (write-bytes (port->bytes p) out)
+  (close-output-port out)
+  (close-input-port p))
+
+(define (get-delta #:cursor [cursor ""]
+                   #:locale [locale DEFAULT-LOCALE])
+  (define params (format-params "locale" locale "cursor" cursor))
+  (define p
+    (post-pure-port
+     (mk-api-url "delta" params)
+     (bytes)
+     AUTHORIZATION-HEADER))
+  (define jsexp (read-json p))
+  (close-input-port p)
+  jsexp)
+
+(define (get-revisions filepath #:rev-limit [rev-limit 10]
+                                #:locale [locale DEFAULT-LOCALE])
+  (define params (format-params "rev_limit" (number->string rev-limit)
+                                "locale" locale))
+  (define p
+    (get-pure-port
+     (mk-api-url (string-append "revisions/" (get-root) "/" filepath)
+                 params)
+     AUTHORIZATION-HEADER))
+  (define jsexp (read-json p))
+  (close-input-port p)
+  jsexp)
+
+;; restores given remote file to specified revision
+;; must use "rev" metadata field
+;; ("revision" metadata field is deprecated)
+(define (restore-file filepath rev #:locale [locale DEFAULT-LOCALE])
+  (define params (format-params "rev" rev
+                                "locale" locale))
+  (define p
+    (post-pure-port
+     (mk-api-url (string-append "restore/" (get-root) "/" filepath)
+                 params)
+     (bytes)
+     AUTHORIZATION-HEADER))
+  (define jsexp (read-json p))
+  (close-input-port p)
+  jsexp)
+
+;; searches for files whose name includes the query string
+;; recursively searches subdirectories
+(define (search remote-dir query
+                #:file-limit [file-limit 1000]
+                #:inc-del [inc-del "false"]
+                #:locale [locale DEFAULT-LOCALE])
+  (define params (format-params "query" query
+                                "file_limit" (number->string file-limit)
+                                "include_deleted" inc-del
+                                "locale" locale))
+  (define p
+    (get-pure-port
+     (mk-api-url (string-append "search/" (get-root) "/" remote-dir)
+                 params)
+     AUTHORIZATION-HEADER))
+  (define jsexp (read-json p))
+  (close-input-port p)
+  jsexp)
+
+;; publically shares specified file or dir at returned url
+(define (get-share-url remote-path
+                       #:locale [locale DEFAULT-LOCALE]
+                       #:short-url [short-url "true"])
+  (define params (format-params "locale" locale
+                                "short_url" short-url))
+  (define p
+    (post-pure-port
+     (mk-api-url (string-append "shares/" (get-root) "/" remote-path)
+                 params)
+     (bytes)
+     AUTHORIZATION-HEADER))
+  (define jsexp (read-json p))
+  (close-input-port p)
+  jsexp)
+
+;; use this instead of get-share-url to stream media files
+;; input must be a file (cannot stream a dir)
+(define (get-media-url remote-file
+                       #:locale [locale DEFAULT-LOCALE])
+  (define params (format-params "locale" locale))
+  (define p
+    (post-pure-port
+     (mk-api-url (string-append "media/" (get-root) "/" remote-file)
+                 params)
+     (bytes)
+     AUTHORIZATION-HEADER))
+  (define jsexp (read-json p))
+  (close-input-port p)
+  jsexp)
+
+;; gets a copy_ref string, to use with copy-file
+(define (get-copy-ref remote-file)
+  (define p
+    (get-pure-port
+     (mk-api-url (string-append "copy_ref/" (get-root) "/" remote-file))
+     AUTHORIZATION-HEADER))
+  (define jsexp (read-json p))
+  (close-input-port p)
+  jsexp)
+
+;; remote-file must be an image
+;; #:format = "jpeg" (default) or "png"
+;; #:size = "xs", "s", "m", "l", or "xl"
+;; #:exists = 'error 'append 'update 'can-update 'replace 'truncate
+;;            'must-truncate 'truncate/replace
+(define (get-image-thumbnail remote-file local-file
+                             #:format [format "jpeg"]
+                             #:size [size "s"]
+                             #:exists [exists 'error])
+  (define params (format-params "format" format
+                                "size" size))
+  (define p
+    (get-pure-port
+     (mk-api-content-url 
+      (string-append "thumbnails/" (get-root) "/" remote-file)
+      params)
+     AUTHORIZATION-HEADER))
+  (define out (open-output-file local-file 
+                                #:mode 'binary
+                                #:exists exists))
+  (write-bytes (port->bytes p) out)
+  (close-output-port out)
+  (close-input-port p))
+
+;; uploads a file larger than 150mb
+;; remote-filepath should be a remote file name and NOT a directory
+;; #:chunk-size is in bytes (default = 4mb chunks)
+(define (upload-large-file local-filepath remote-filepath 
+                           #:locale [locale DEFAULT-LOCALE] 
+                           #:overwrite? [overwrite? "true"]
+                           #:parent-rev [parent-rev ""]
+                           #:chunk-size [chunk-size 4194304])
+  (define upload-id #f)
+  (define offset 0)
+  (define in (open-input-file local-filepath))
+  (let LOOP ([chunk (read-bytes chunk-size in)])
+    (unless (eof-object? chunk)
+      (let ([params (if upload-id
+                        (format-params "upload_id" upload-id
+                                       "offset" (number->string offset))
+                        (format-params "offset" "0"))])
+        (define p
+          (put-pure-port
+           (mk-api-content-url "chunked_upload" params)
+           chunk
+           AUTHORIZATION-HEADER))
+        (define jsexp (read-json p))
+        (close-input-port p)
+        (set! upload-id (hash-ref jsexp 'upload_id))
+        (set! offset (hash-ref jsexp 'offset)))
+      (LOOP (read-bytes chunk-size in))))
+  (close-input-port in)
+  
+  ;; complete the upload
+  (define params (format-params "locale" locale
+                                "overwrite" overwrite?
+                                "parent_rev" parent-rev
+                                "upload_id" upload-id))
+  (define p
+    (post-pure-port
+     (mk-api-content-url
+      (string-append "commit_chunked_upload/" (get-root) "/" remote-filepath)
+      params)
+     (bytes)
      AUTHORIZATION-HEADER))
   (define jsexp (read-json p))
   (close-input-port p)
