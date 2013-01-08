@@ -56,4 +56,11 @@
 ;(delete "test2")
 ;(delete "xmas2.jpg")
 
-(move "xmas.jpg" "xmasss.jpg")
+;(move "xmas.jpg" "xmasss.jpg")
+(define res
+  (upload-large-file "test-files/xmas.jpg" "xmas.jpg" 
+                     #:verbose? #t 
+;                   #:resume? #t 
+;                   #:resume-id "izFM0xvusanQhT7Sn4BAxA"
+;                   #:resume-offset 8388608
+                     ))

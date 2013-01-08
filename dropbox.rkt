@@ -435,43 +435,95 @@
                            #:locale [locale DEFAULT-LOCALE] 
                            #:overwrite? [overwrite? "true"]
                            #:parent-rev [parent-rev ""]
-                           #:chunk-size [chunk-size 4194304])
+                           #:chunk-size [chunk-size 4194304]
+                           #:verbose? [verbose? #f]
+                           #:resume? [resume? #f]
+                           #:resume-id [resume-id ""]
+                           #:resume-offset [resume-offset 0])
   (define upload-id #f)
   (define offset 0)
   (define in (open-input-file local-filepath))
+  (when resume?
+    (when verbose?
+      (printf "Resuming chunk upload, id = ~a\n" resume-id))
+    (set! upload-id resume-id)
+    (set! offset resume-offset)
+    (read-bytes offset in)) ; skip these bytes
   (let LOOP ([chunk (read-bytes chunk-size in)])
-    (unless (eof-object? chunk)
-      (let ([params (if upload-id
-                        (format-params "upload_id" upload-id
-                                       "offset" (number->string offset))
-                        (format-params "offset" "0"))])
-        (define p
-          (put-pure-port
-           (mk-api-content-url "chunked_upload" params)
-           chunk
-           AUTHORIZATION-HEADER))
-        (define jsexp (read-json p))
-        (close-input-port p)
-        (set! upload-id (hash-ref jsexp 'upload_id))
-        (set! offset (hash-ref jsexp 'offset)))
-      (LOOP (read-bytes chunk-size in))))
-  (close-input-port in)
-  
-  ;; complete the upload
-  (define params (format-params "locale" locale
-                                "overwrite" overwrite?
-                                "parent_rev" parent-rev
-                                "upload_id" upload-id))
-  (define p
-    (post-pure-port
-     (mk-api-content-url
-      (string-append "commit_chunked_upload/" (get-root) "/" remote-filepath)
-      params)
-     (bytes)
-     AUTHORIZATION-HEADER))
-  (define jsexp (read-json p))
-  (close-input-port p)
-  jsexp)
+    (with-handlers 
+        ([exn:fail:network:errno? 
+          (λ _ 
+            (when verbose?
+              (printf "Network connection lost. Returning resume thunk.\n"))
+            (thunk 
+             (upload-large-file local-filepath remote-filepath
+                                #:locale locale
+                                #:overwrite? overwrite?
+                                #:parent-rev parent-rev
+                                #:chunk-size chunk-size
+                                #:verbose? verbose?
+                                #:resume? #t
+                                #:resume-id upload-id
+                                #:resume-offset offset)))])
+    (if (eof-object? chunk)
+        (let ([params (format-params "locale" locale
+                                     "overwrite" overwrite?
+                                     "parent_rev" parent-rev
+                                     "upload_id" upload-id)])
+          (close-input-port in)
+          (define p
+            (post-pure-port
+             (mk-api-content-url
+              (string-append "commit_chunked_upload/" (get-root) "/" 
+                             remote-filepath)
+              params)
+             (bytes)
+             AUTHORIZATION-HEADER))
+          (define jsexp (read-json p))
+          (when verbose? 
+            (printf "Chunk upload completed, id = ~a\n" upload-id))
+          (close-input-port p)
+          jsexp)
+        (let ([params (if upload-id
+                          (format-params "upload_id" upload-id
+                                         "offset" (number->string offset))
+                          (format-params "offset" "0"))])
+          (define p
+            (put-pure-port
+             (mk-api-content-url "chunked_upload" params)
+             chunk
+             AUTHORIZATION-HEADER))
+          (define jsexp (read-json p))
+          (close-input-port p)
+          (unless upload-id
+            (when verbose?
+              (printf "Chunk upload started, id = ~a\n" 
+                      (hash-ref jsexp 'upload_id))))
+          (set! upload-id (hash-ref jsexp 'upload_id))
+          (when verbose?
+            (printf "Chunk uploaded: bytes ~a to ~a\n" 
+                    offset (hash-ref jsexp 'offset)))
+          (set! offset (hash-ref jsexp 'offset))
+          (LOOP (read-bytes chunk-size in))))))
+;  (close-input-port in)
+;  
+;  ;; complete the upload
+;  (define params (format-params "locale" locale
+;                                "overwrite" overwrite?
+;                                "parent_rev" parent-rev
+;                                "upload_id" upload-id))
+;  (define p
+;    (post-pure-port
+;     (mk-api-content-url
+;      (string-append "commit_chunked_upload/" (get-root) "/" remote-filepath)
+;      params)
+;     (bytes)
+;     AUTHORIZATION-HEADER))
+;  (define jsexp (read-json p))
+;  (when verbose? (printf "Chunk upload completed, id = ~a\n" upload-id))
+;  (close-input-port p)
+;  jsexp
+  )
 
 ;; ----------------------------------------------------------------------------
 ;; file operations, ie copy, delete, move, etc
