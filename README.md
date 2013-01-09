@@ -3,4 +3,4 @@ racket-dropbox
 
 Racket bindings for Dropbox API
 
-[documentation](scribblings/dropbox.html)
+[documentation](dropbox/scribblings/dropbox.html)
