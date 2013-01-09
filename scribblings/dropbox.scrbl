@@ -14,7 +14,7 @@
 
 @author[@author+email["Stephen Chang" "stchang@racket-lang.org"]]
 
-Dropbox SDK for Racket.
+Dropbox SDK for Racket. Requires Racket version 5.3.1.12 or later.
 
 @section[#:tag "authentication"]{OAuth authentication}
 

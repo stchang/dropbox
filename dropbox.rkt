@@ -3,6 +3,8 @@
 ;; Racket bindings for Dropbox API:
 ;; https://www.dropbox.com/developers/reference/api
 
+;; Requires Racket 5.3.1.12 or later
+
 ;; TODO:
 ;; [o] = open, [x] = closed
 ;;
