@@ -18,6 +18,8 @@
 ;;                 so AUTHORIZATION-HEADER is not repeated
 ;; [o] 2013-01-07: create utility fn to build remote path
 ;; [o] 2013-01-07: fix POST calls to not include params in url
+;; [o] 2014-01-08: fix download-file and get-image-thumbnail to return the
+;;                 metadata of downloaded file (instead of void)
 
 (require net/url
          net/uri-codec ; form-urlencoded->alist
@@ -50,6 +52,8 @@
          get-copy-ref
          get-image-thumbnail
          upload-large-file
+         
+         ;; file ops
          copy
          create-folder
          delete
@@ -153,7 +157,7 @@
   (set! OAUTH-REQUEST-SECRET (cdr (assq 'oauth_token_secret response-alist)))
   (set! OAUTH-REQUEST-TOKEN (cdr (assq 'oauth_token response-alist)))
   
-  (values OAUTH-REQUEST-SECRET OAUTH-REQUEST-TOKEN))
+  (values OAUTH-REQUEST-TOKEN OAUTH-REQUEST-SECRET))
 
 ;; get authorization url
 ;; user should go to returned url to grant access
@@ -222,7 +226,7 @@
                       #:list [lst "true"]
                       #:inc-del [inc-del "false"]
                       #:rev [rev ""]
-                      #:local [locale DEFAULT-LOCALE])
+                      #:locale [locale DEFAULT-LOCALE])
   (define params (format-params "file_limit" (number->string file-limit)
                                 "hash" hash
                                 "list" lst
@@ -505,24 +509,6 @@
                     offset (hash-ref jsexp 'offset)))
           (set! offset (hash-ref jsexp 'offset))
           (LOOP (read-bytes chunk-size in))))))
-;  (close-input-port in)
-;  
-;  ;; complete the upload
-;  (define params (format-params "locale" locale
-;                                "overwrite" overwrite?
-;                                "parent_rev" parent-rev
-;                                "upload_id" upload-id))
-;  (define p
-;    (post-pure-port
-;     (mk-api-content-url
-;      (string-append "commit_chunked_upload/" (get-root) "/" remote-filepath)
-;      params)
-;     (bytes)
-;     AUTHORIZATION-HEADER))
-;  (define jsexp (read-json p))
-;  (when verbose? (printf "Chunk upload completed, id = ~a\n" upload-id))
-;  (close-input-port p)
-;  jsexp
   )
 
 ;; ----------------------------------------------------------------------------

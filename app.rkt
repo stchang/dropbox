@@ -12,7 +12,7 @@
 #;(obtain-access-token)
 ;(get-account-info)
 #;(get-metadata "lazyinf.pdf")
-#;(upload-file "test-files/lazyinf.pdf" "lazyinf.pdf"
+(upload-file "test-files/dropbox.pdf" "test"
 ;             #:locale "pt-BR"
              #:overwrite? "false"
 ;             #:parent-rev "20ce7e933"
@@ -57,7 +57,7 @@
 ;(delete "xmas2.jpg")
 
 ;(move "xmas.jpg" "xmasss.jpg")
-(define res
+#;(define res
   (upload-large-file "test-files/xmas.jpg" "xmas.jpg" 
                      #:verbose? #t 
 ;                   #:resume? #t 
