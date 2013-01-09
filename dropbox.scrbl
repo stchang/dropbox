@@ -1,6 +1,6 @@
 #lang scribble/manual
 @(require scribble/eval
-          (for-label "../dropbox.rkt"
+          (for-label "dropbox.rkt"
                      racket/contract
                      racket/base
                      json))
@@ -8,9 +8,9 @@
 @title{Racket Dropbox SDK}
 
 @(define the-eval (make-base-eval))
-@(the-eval '(require "../dropbox.rkt"))
+@(the-eval '(require "dropbox.rkt"))
 
-@defmodule["../dropbox.rkt"]
+@defmodule["dropbox.rkt"]
 
 @author[@author+email["Stephen Chang" "stchang@racket-lang.org"]]
 
