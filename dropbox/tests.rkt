@@ -1,9 +1,10 @@
 #lang racket
 
-(require "dropbox.rkt")
-(require rackunit)
-(require json)
-(require file/sha1)
+(require "dropbox.rkt"
+         rackunit
+         json
+         file/sha1
+         net/url)
 
 ;; ----------------------------------------------------------------------------
 ;; These tests use the Dropbox app "Racket Test App"
@@ -12,6 +13,9 @@
 
 ;(set!-APP-KEY "3ysfqt0flcbex2t")
 ;(set!-APP-SECRET "hia6gkco347zczj")
+
+;; Also, these tests are only for "app_folder" (ie, limited) access type
+;; and not "dropbox" (ie, full) access.
 
 ;; ----------------------------------------------------------------------------
 ;; App has been granted access using the recommended OAuth authentication process:
@@ -72,6 +76,9 @@
 (define PNG-PATH (string-append TEST-DIR "/" PNG-FILE))
 (define BIG-PATH (string-append TEST-DIR "/" BIG-FILE))
 
+;; ----------------------------------------
+;; utility functions/macros
+
 ;; multi-arity equal?
 ;; must have at least 1 argument
 (define (equa? . args)
@@ -81,98 +88,212 @@
 (define-syntax (check-field: stx)
   (syntax-case stx (in-metas: vals:)
     [(_ fld in-metas: m ... equal-to: v)
-     #'(check-true (equa? (hash-ref m (quote fld)) ... v))]))
+     (syntax/loc stx (check-true (equa? (hash-ref m (quote fld)) ... v)))]))
 (define-syntax (check-field-equal: stx)
   (syntax-case stx (in-metas:)
     [(_ fld in-metas: m ...)
-     #'(check-true (equa? (hash-ref m (quote fld)) ...))]))
+     (syntax/loc stx (check-true (equa? (hash-ref m (quote fld)) ...)))]))
 (define-syntax (check-field-not-equal: stx)
   (syntax-case stx (in-metas:)
     [(_ fld in-metas: m1 m2)
-     #'(check-false (equa? (hash-ref m1 (quote fld))
-                           (hash-ref m2 (quote fld))))]))
+     (syntax/loc stx (check-false (equal? (hash-ref m1 (quote fld))
+                                          (hash-ref m2 (quote fld)))))]))
 
-(define (do-upload/download-test localfile remotefile)
-  ;; upload
-  (define uploaded-meta (upload-file localfile remotefile #:overwrite? "true"))
-  (define uploaded-rev-meta (first (get-revisions remotefile)))
+;; ----------------------------------------
+;; upload/download test fn
+(define (do-upload/download-test localfile remote-file
+                                 #:remote-dir [remote-dir ""]
+                                 #:large-file? [large-file? #f])
+  (define remotefile (if (string=? remote-dir "")
+                         remote-file
+                         (string-append remote-dir "/" remote-file)))
+  (define orig-size (file-size localfile))
+  (define orig-sha1 (call-with-input-file localfile sha1))
+
+  (unless (string=? remote-dir "")
+    (if (null? (search "" remote-dir))
+        (create-folder remote-dir)
+        (begin
+          (delete remote-dir)
+          (create-folder remote-dir))))
+  
+  ;; uploading ------------------------------
+  ;; save revision number
+  (define uploaded-meta 
+    (if large-file?
+        (upload-large-file localfile remotefile #:overwrite? "true")
+        (upload-file localfile remotefile #:overwrite? "true")))
+  (check-true (jsexpr? uploaded-meta)) ;; check not thunk (ie upload completed)
+  (define uploaded-meta-from-revlst (first (get-revisions remotefile)))
+  (define up-rev (hash-ref uploaded-meta 'rev))
   (define meta (get-metadata remotefile))
   
-  ;; delete locally, but record size and sha1 hash
-  (define old-size (file-size localfile))
-  (define old-sha1 (call-with-input-file localfile sha1))
+  (check-field-equal: rev 
+   in-metas:          uploaded-meta uploaded-meta-from-revlst meta)
+  
+  (check-field: bytes
+   in-metas:    uploaded-meta uploaded-meta-from-revlst meta
+   equal-to:    orig-size)
+
+  ;; searching ------------------------------
+  (define search-meta (first (search remote-dir remote-file)))
+  
+  (check-field-equal: rev
+   in-metas: search-meta uploaded-meta)
+  
+  ;; copying ------------------------------
+  ;; remote-file x2
+  (define copiedfile 
+    (if (string=? remote-dir "")
+        (string-append remote-file remote-file)
+        (string-append remote-dir "/" remote-file remote-file)))
+  (define copied-meta (copy remotefile copiedfile))
+  
+  (define copyref (get-copy-ref remotefile))
+  ;; remote-file x3
+  (define copyref-copiedfile
+    (define copiedfile 
+      (if (string=? remote-dir "")
+          (string-append remote-file remote-file remote-file)
+          (string-append remote-dir "/" remote-file remote-file remote-file))))
+  (define copyref-copied-meta (copy "" copyref-copiedfile #:copy-ref copyref))
+  
+  (check-field-equal: rev
+   in-metas:          uploaded-meta copied-meta copyref-copied-meta)
+  (check-field: bytes
+   in-metas:    copied-meta copyref-copied-meta
+   equal-to:    orig-size)
+  
+  ;; moving ------------------------------
+  ;; remove-file x4
+  (define movedfile 
+    (if (string=? remote-dir "")
+        (string-append remote-file remote-file remote-file remote-file)
+        (string-append remote-dir "/" 
+                       remote-file remote-file remote-file remote-file)))
+  (define moved-meta (move remotefile movedfile))
+  
+  (check-field-equal: rev
+   in-metas:          uploaded-meta moved-meta)
+  (check-field: bytes
+   in-metas:    moved-meta
+   equal-to:    orig-size)
+  
+  ;; check share urls ------------------------------
+  ;; example: http://db.tt/JST2Phny
+  (define share-url-short 
+    (string->url (hash-ref (get-share-url remotefile) 'url)))
+  ;; https://www.dropbox.com/s/4ny073s2zeomkw7/dropbox.pdf
+  (define share-url 
+    (string->url (hash-ref (get-share-url remotefile #:short-url "false") 'url)))
+  ;; https://dl.dropbox.com/0/view/znoemp4dlzoyb1n/Apps/Racket%20Test%20App/dropbox.pdf
+  (define media-url 
+    (string->url (hash-ref (get-media-url remotefile) 'url)))
+  
+  (check-equal? (url-scheme share-url-short) "http")
+  (check-equal? (url-scheme share-url) "https")
+  (check-equal? (url-scheme media-url) "https")
+  (check-equal? (url-host share-url-short) "db.tt")
+  (check-equal? (url-host share-url) "www.dropbox.com")
+  (check-equal? (url-host media-url) "dl.dropbox.com")
+  ;; url-path returns list of path/param structs, where each one is a subdir
+  ;; The path field is the path string
+  (check-equal? (last (map path/param-path (url-path share-url)))
+                remote-file)
+  (check-equal? (last (map path/param-path (url-path media-url)))
+                remote-file)
+  
+  ;; downloading ------------------------------
+  ;; delete locally first, but record size and sha1 hash
   (check-true (file-exists? localfile))
-  (delete-directory/files localfile)
+  (delete-file localfile)
   (check-false (file-exists? localfile))
   
-  ;; re-download file
+  ;; now download file
   (download-file remotefile localfile #:exists 'replace)
   (define new-size (file-size localfile))
   (define new-sha1 (call-with-input-file localfile sha1))
   
-  ;; delete remotely
+  (check-equal? orig-size new-size)
+  (check-equal? orig-sha1 new-sha1)
+
+  ;; deleting ------------------------------
   (define deleted-meta (delete remotefile))
-  (define deleted-rev-meta (first (get-revisions remotefile)))
-
-  (check-field-equal: rev 
-   in-metas:          uploaded-meta uploaded-rev-meta meta)
-
-  (check-field-not-equal: rev
-   in-metas:              meta deleted-meta)
+  (define deleted-meta-from-revlst (first (get-revisions remotefile)))
   
   (check-field-equal: rev
-   in-metas:          deleted-meta deleted-rev-meta)
-  
-  (check-field: bytes
-   in-metas:    uploaded-meta uploaded-rev-meta meta
-   equal-to:    old-size)
+   in-metas:          deleted-meta deleted-meta-from-revlst)
 
   (check-field: bytes
-   in-metas:    deleted-meta deleted-rev-meta
+   in-metas:    deleted-meta deleted-meta-from-revlst
    equal-to:    0)
   
-  (check-field: path
-   in-metas: uploaded-meta uploaded-rev-meta meta deleted-meta deleted-rev-meta
-   equal-to:    (string-append "/" remotefile))
-  
-  (check-equal? old-size new-size)
-  (check-equal? old-sha1 new-sha1)
-  
-  #;(values uploaded-meta meta deleted-meta))
+  ;; revisions should have changed
+  (check-field-not-equal: rev
+   in-metas:              meta deleted-meta)
+ 
+  ;; restoring ------------------------------
+  (define restored-meta (restore-file remotefile up-rev))
+  (define restored-meta-from-revlst (first (get-revisions remotefile)))
 
+  (check-field-not-equal: rev
+   in-metas:              restored-meta deleted-meta)
+  (check-field-not-equal: rev
+   in-metas:              restored-meta uploaded-meta)
+  (check-field-equal: rev
+   in-metas:          restored-meta restored-meta-from-revlst)
+  (check-field: bytes
+   in-metas:    restored-meta restored-meta-from-revlst
+   equal-to:    orig-size)
+  
+  ;; download again after restoring
+  (check-true (file-exists? localfile))
+  (delete-file localfile)
+  (check-false (file-exists? localfile))
+  
+  (download-file remotefile localfile #:exists 'replace)
+  (define new-size2 (file-size localfile))
+  (define new-sha12 (call-with-input-file localfile sha1))
+  
+  (check-equal? orig-size new-size2)
+  (check-equal? orig-sha1 new-sha12)
+  
+  ;; delete again
+  (delete remotefile)
+
+  ;; other checks ------------------------------
+  (check-field: path
+   in-metas: uploaded-meta uploaded-meta-from-revlst meta 
+             deleted-meta deleted-meta-from-revlst
+             restored-meta restored-meta-from-revlst
+   equal-to: (string-append "/" remotefile))
+  
+  )
+
+;; test upload to app root dir
 (do-upload/download-test PDF-PATH PDF-FILE)
 (do-upload/download-test PNG-PATH PNG-FILE)
-(do-upload/download-test BIG-PATH BIG-FILE)
+;(do-upload/download-test BIG-PATH BIG-FILE)
+#;(do-upload/download-test BIG-PATH BIG-FILE #:large-file? #t)
 
-#;(get-metadata "lazyinf.pdf")
+;; test upload to app subdir
+(do-upload/download-test PDF-PATH PDF-FILE #:remote-dir TEST-DIR)
+(do-upload/download-test PNG-PATH PNG-FILE #:remote-dir TEST-DIR)
+;(do-upload/download-test BIG-PATH BIG-FILE #:remote-dir TEST-DIR)
+#;(do-upload/download-test BIG-PATH BIG-FILE #:remote-dir TEST-DIR
+                                            #:large-file? #t)
 
-#;(download-file "lazyinf.pdf" "lazyinf.pdf" #:exists 'replace)
-
-#;(upload-file-post "test-files/lazyinf.pdf" "lazyinf.pdf"
-;             #:locale "pt-BR"
-             #:overwrite? "false"
-;             #:parent-rev "20ce7e933"
-             )
-
-;; not sure how to test this
+;; not sure how to test these
 #;(get-delta)
-#;(get-revisions "testing-revisions.txt")
-#;(restore-file "testing-revisions.txt" "110ce7e933")
+#;(get-image-thumbnail "xmas.jpg" "xmas-thumb.jpg" 
+                       #:size "s" #:exists 'replace)
+;; interrupted chunk upload
 
-#;(upload-file "testing-revisions.txt" "testing-revisions.txt")
 
-;(search "" "test")
-;(search "" "txt")
-;(search "test" "pdf")
-
-;(get-share-url "test" #:short-url "false")
-;(get-media-url "lazyinf.pdf")
 
 #;(get-copy-ref "lazyinf.pdf")
 
 ;(upload-file "test-files/maine.jpg" "maine.jpg")
-#;(get-image-thumbnail "maine.jpg" "maine-thumb.jpg" 
-                     #:size "m" #:exists 'replace)
 
 ;(upload-large-file "test-files/xmas.jpg" "xmas.jpg")
 #;(download-file "xmas.jpg" "xmas.jpg")
