@@ -115,30 +115,25 @@
   (define deleted-rev-meta (first (get-revisions remotefile)))
 
   (check-field-equal: rev 
-   in-metas: uploaded-meta uploaded-rev-meta meta)
-  #;(check-true (string=? (hash-ref uploaded-meta 'rev)
-                        (hash-ref uploaded-rev-meta 'rev)
-                        (hash-ref meta 'rev)))
-  (check-false (string=? (hash-ref meta 'rev)
-                         (hash-ref deleted-meta 'rev)))
-  (check-true (string=? (hash-ref deleted-meta 'rev)
-                        (hash-ref deleted-rev-meta 'rev)))
+   in-metas:          uploaded-meta uploaded-rev-meta meta)
+
+  (check-field-not-equal: rev
+   in-metas:              meta deleted-meta)
   
-  (check-true (= (hash-ref uploaded-meta 'bytes)
-                 (hash-ref uploaded-rev-meta 'bytes)
-                 (hash-ref meta 'bytes)
-                 old-size
-                 new-size))
-  (check-true (= (hash-ref deleted-meta 'bytes)
-                 (hash-ref deleted-rev-meta 'bytes)
-                 0))
+  (check-field-equal: rev
+   in-metas:          deleted-meta deleted-rev-meta)
   
-  (check-true (string=? (hash-ref uploaded-meta 'path)
-                        (hash-ref uploaded-rev-meta 'path)
-                        (hash-ref meta 'path)
-                        (hash-ref deleted-meta 'path)
-                        (hash-ref deleted-rev-meta 'path)
-                        (string-append "/" remotefile)))
+  (check-field: bytes
+   in-metas:    uploaded-meta uploaded-rev-meta meta
+   equal-to:    old-size)
+
+  (check-field: bytes
+   in-metas:    deleted-meta deleted-rev-meta
+   equal-to:    0)
+  
+  (check-field: path
+   in-metas: uploaded-meta uploaded-rev-meta meta deleted-meta deleted-rev-meta
+   equal-to:    (string-append "/" remotefile))
   
   (check-equal? old-size new-size)
   (check-equal? old-sha1 new-sha1)
@@ -147,7 +142,7 @@
 
 (do-upload/download-test PDF-PATH PDF-FILE)
 (do-upload/download-test PNG-PATH PNG-FILE)
-;(do-upload/download-test BIG-PATH BIG-FILE)
+(do-upload/download-test BIG-PATH BIG-FILE)
 
 #;(get-metadata "lazyinf.pdf")
 
