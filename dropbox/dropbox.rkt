@@ -64,7 +64,8 @@
 
 ;; ----------------------------------------------------------------------------
 ;; Constants for app key and app secret.
-;; These must be set before starting OAuth authentication
+;; These must be set before starting OAuth authentication.
+;; Default values are used for testing purposes only.
 ;; ----------------------------------------------------------------------------
 (define APP-KEY "3ysfqt0flcbex2t")
 (define APP-SECRET "hia6gkco347zczj")
@@ -127,7 +128,8 @@
 ;; Step 3) call obtain-access-token
 ;; ----------------------------------------------------------------------------
 
-;; user should ignore these initial tokens/secrets and get their own
+;; User should ignore these initial tokens/secrets and get their own.
+;; Default values are used for testing purposes only.
 (define OAUTH-REQUEST-TOKEN "uk264rf6wc0lyte")
 (define OAUTH-REQUEST-SECRET "8vfhlfahxd8xfxp")
 (define OAUTH-ACCESS-TOKEN "ws51ylwe4geys4c")
