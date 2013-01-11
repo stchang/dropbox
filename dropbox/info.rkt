@@ -4,5 +4,7 @@
 (define categories '(misc))
 (define repositories (list "4.x"))
 (define primary-file '("dropbox.rkt"))
+(define required-core-version "5.3.1.12")
+(define version "1.1")
 (define blurb (list '(div "Racket bindings for Dropbox API.")))
 (define release-notes  (list '(div "")))
