@@ -99,6 +99,12 @@
      (syntax/loc stx (check-false (equal? (hash-ref m1 (quote fld))
                                           (hash-ref m2 (quote fld)))))]))
 
+;; filters a search result by exact filename
+(define (filter-search-by-exact-match filename search-res)
+  (filter (λ (m) (string=? (hash-ref m 'path)
+                           (string-append "/" filename)))
+              search-res))
+
 ;; ----------------------------------------
 ;; upload/download test fn
 (define (do-upload/download-test localfile remote-file
@@ -136,48 +142,87 @@
    equal-to:    orig-size)
 
   ;; searching ------------------------------
-  (define search-meta (first (search remote-dir remote-file)))
+  (define search-meta 
+    (filter-search-by-exact-match remotefile (search remote-dir remote-file)))
+  
+  (check-false (null? search-meta))
   
   (check-field-equal: rev
-   in-metas: search-meta uploaded-meta)
+   in-metas: (first search-meta) uploaded-meta)
   
   ;; copying ------------------------------
-  ;; remote-file x2
+  (define copied-file (string-append "COPIED" remote-file))
   (define copiedfile 
     (if (string=? remote-dir "")
-        (string-append remote-file remote-file)
-        (string-append remote-dir "/" remote-file remote-file)))
+        copied-file
+        (string-append remote-dir "/" copied-file)))
+
+  ;; delete copy target if it's already there
+;  (define copied-check
+;    (filter-search-by-exact-match copiedfile (search remote-dir copied-file)))
+;  (unless (null? copied-check) (delete copiedfile))
+  (when (exists? remote-dir copied-file) 
+    (delete copiedfile))
+  
   (define copied-meta (copy remotefile copiedfile))
+  (define copied-search-meta 
+    (filter-search-by-exact-match copiedfile (search remote-dir copied-file)))
   
-  (define copyref (get-copy-ref remotefile))
-  ;; remote-file x3
+  (check-false (null? copied-search-meta))
+  
+  (define copyref (hash-ref (get-copy-ref remotefile) 'copy_ref))
+  (define copyref-copied-file (string-append "COPYREF" remote-file))
   (define copyref-copiedfile
-    (define copiedfile 
-      (if (string=? remote-dir "")
-          (string-append remote-file remote-file remote-file)
-          (string-append remote-dir "/" remote-file remote-file remote-file))))
-  (define copyref-copied-meta (copy "" copyref-copiedfile #:copy-ref copyref))
+    (if (string=? remote-dir "")
+        copyref-copied-file
+        (string-append remote-dir "/" copyref-copied-file)))
+
+  ;; delete copy target if it's already there
+;  (define copyref-copied-check
+;    (filter-search-by-exact-match copyref-copiedfile (search remote-dir copyref-copied-file)))
+;  (unless (null? copyref-copied-check) (delete copyref-copiedfile))
+  (when (exists? remote-dir copyref-copied-file) 
+    (delete copyref-copiedfile))
   
-  (check-field-equal: rev
-   in-metas:          uploaded-meta copied-meta copyref-copied-meta)
+  (define copyref-copied-meta (copy "" copyref-copiedfile #:copy-ref copyref))
+  (define copyref-copied-search-meta 
+    (filter-search-by-exact-match copyref-copiedfile
+                                  (search remote-dir copyref-copied-file)))
+  
+  (check-false (null? copyref-copied-search-meta))
+  
   (check-field: bytes
-   in-metas:    copied-meta copyref-copied-meta
+   in-metas:    copied-meta (first copied-search-meta)
+                copyref-copied-meta (first copyref-copied-search-meta)
    equal-to:    orig-size)
   
   ;; moving ------------------------------
-  ;; remove-file x4
+  (define moved-file (string-append "MOVED" remote-file))
   (define movedfile 
     (if (string=? remote-dir "")
-        (string-append remote-file remote-file remote-file remote-file)
-        (string-append remote-dir "/" 
-                       remote-file remote-file remote-file remote-file)))
-  (define moved-meta (move remotefile movedfile))
+        moved-file
+        (string-append remote-dir "/" moved-file)))
+
+  ;; delete move target if it's already there
+;  (define moved-check
+;    (filter-search-by-exact-match movedfile (search remote-dir moved-file)))
+;  (unless (null? moved-check) (delete movedfile))
+  (when (exists? remote-dir moved-file)
+    (delete movedfile))
+
+  (define moved-meta (move copiedfile movedfile))
+  (define moved-search-meta 
+    (filter-search-by-exact-match movedfile (search remote-dir moved-file)))
   
-  (check-field-equal: rev
-   in-metas:          uploaded-meta moved-meta)
+  (check-false (null? moved-search-meta))
+  
   (check-field: bytes
-   in-metas:    moved-meta
+   in-metas:    moved-meta (first moved-search-meta)
    equal-to:    orig-size)
+  
+  ;; cleanup
+  (delete copyref-copiedfile)
+  (delete movedfile)
   
   ;; check share urls ------------------------------
   ;; example: http://db.tt/JST2Phny
@@ -268,11 +313,12 @@
              restored-meta restored-meta-from-revlst
    equal-to: (string-append "/" remotefile))
   
+
   )
 
 ;; test upload to app root dir
-(do-upload/download-test PDF-PATH PDF-FILE)
-(do-upload/download-test PNG-PATH PNG-FILE)
+;(do-upload/download-test PDF-PATH PDF-FILE)
+;(do-upload/download-test PNG-PATH PNG-FILE)
 ;(do-upload/download-test BIG-PATH BIG-FILE)
 #;(do-upload/download-test BIG-PATH BIG-FILE #:large-file? #t)
 

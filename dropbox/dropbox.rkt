@@ -60,6 +60,7 @@
          create-folder
          delete
          move
+         exists?
          )
 
 ;; ----------------------------------------------------------------------------
@@ -519,6 +520,20 @@
 ;; file operations, ie copy, delete, move, etc
 ;; ----------------------------------------------------------------------------
 
+(define (filter-search-by-exact-match filename search-res)
+  (filter (λ (m) (string=? (hash-ref m 'path)
+                           (string-append "/" filename)))
+              search-res))
+
+;; function to check if dropbox file already exists
+(define (exists? dirname filename)
+  (define filepath
+    (if (string=? dirname "")
+        filename
+        (string-append dirname "/" filename)))
+  (not
+   (null? (filter-search-by-exact-match filepath (search dirname filename)))))
+  
 ;; copy file or folder
 (define (copy from to
                    #:locale [locale DEFAULT-LOCALE]
