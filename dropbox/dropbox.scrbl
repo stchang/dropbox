@@ -202,3 +202,7 @@ When the upload completes successfully, a @tech{jsexpr} is returned with the met
                [#:locale locale string? "en"]) jsexpr?]{
   Moves specified file or folder to specified destination. Returns metadata for moved file or folder in a @tech{jsexpr}.
 }                                                      
+ 
+@defproc[(exists? [dirname string?] [filename string?]) boolean?]{
+  Indicates whether specified remote file exists in specified directory. Uses a search query.
+  }

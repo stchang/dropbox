@@ -258,6 +258,8 @@
   (define deleted-meta (delete remotefullpath))
   (define deleted-meta-from-revlst (first (get-revisions remotefullpath)))
   
+  (check-false (exists? remote-dir remote-file))
+  
   (check-field-equal: rev
    in-metas:          deleted-meta deleted-meta-from-revlst)
 
@@ -272,6 +274,8 @@
   ;; restoring ------------------------------
   (define restored-meta (restore-file remotefullpath up-rev))
   (define restored-meta-from-revlst (first (get-revisions remotefullpath)))
+  
+  (check-true (exists? remote-dir remote-file))
 
   (check-field-not-equal: rev
    in-metas:              restored-meta deleted-meta)
