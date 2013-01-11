@@ -110,7 +110,7 @@
 (define (do-upload/download-test localfile remote-file
                                  #:remote-dir [remote-dir ""]
                                  #:large-file? [large-file? #f])
-  (define remotefile (if (string=? remote-dir "")
+  (define remotefullpath (if (string=? remote-dir "")
                          remote-file
                          (string-append remote-dir "/" remote-file)))
   (define orig-size (file-size localfile))
@@ -127,12 +127,12 @@
   ;; save revision number
   (define uploaded-meta 
     (if large-file?
-        (upload-large-file localfile remotefile #:overwrite? "true")
-        (upload-file localfile remotefile #:overwrite? "true")))
+        (upload-large-file localfile remotefullpath #:overwrite? "true")
+        (upload-file localfile remotefullpath #:overwrite? "true")))
   (check-true (jsexpr? uploaded-meta)) ;; check not thunk (ie upload completed)
-  (define uploaded-meta-from-revlst (first (get-revisions remotefile)))
+  (define uploaded-meta-from-revlst (first (get-revisions remotefullpath)))
   (define up-rev (hash-ref uploaded-meta 'rev))
-  (define meta (get-metadata remotefile))
+  (define meta (get-metadata remotefullpath))
   
   (check-field-equal: rev 
    in-metas:          uploaded-meta uploaded-meta-from-revlst meta)
@@ -143,7 +143,7 @@
 
   ;; searching ------------------------------
   (define search-meta 
-    (filter-search-by-exact-match remotefile (search remote-dir remote-file)))
+    (filter-search-by-exact-match remotefullpath (search remote-dir remote-file)))
   
   (check-false (null? search-meta))
   
@@ -152,41 +152,35 @@
   
   ;; copying ------------------------------
   (define copied-file (string-append "COPIED" remote-file))
-  (define copiedfile 
+  (define copiedfullpath 
     (if (string=? remote-dir "")
         copied-file
         (string-append remote-dir "/" copied-file)))
 
   ;; delete copy target if it's already there
-;  (define copied-check
-;    (filter-search-by-exact-match copiedfile (search remote-dir copied-file)))
-;  (unless (null? copied-check) (delete copiedfile))
   (when (exists? remote-dir copied-file) 
-    (delete copiedfile))
+    (delete copiedfullpath))
   
-  (define copied-meta (copy remotefile copiedfile))
+  (define copied-meta (copy remotefullpath copiedfullpath))
   (define copied-search-meta 
-    (filter-search-by-exact-match copiedfile (search remote-dir copied-file)))
+    (filter-search-by-exact-match copiedfullpath (search remote-dir copied-file)))
   
   (check-false (null? copied-search-meta))
   
-  (define copyref (hash-ref (get-copy-ref remotefile) 'copy_ref))
+  (define copyref (hash-ref (get-copy-ref remotefullpath) 'copy_ref))
   (define copyref-copied-file (string-append "COPYREF" remote-file))
-  (define copyref-copiedfile
+  (define copyref-copiedfullpath
     (if (string=? remote-dir "")
         copyref-copied-file
         (string-append remote-dir "/" copyref-copied-file)))
 
   ;; delete copy target if it's already there
-;  (define copyref-copied-check
-;    (filter-search-by-exact-match copyref-copiedfile (search remote-dir copyref-copied-file)))
-;  (unless (null? copyref-copied-check) (delete copyref-copiedfile))
   (when (exists? remote-dir copyref-copied-file) 
-    (delete copyref-copiedfile))
+    (delete copyref-copiedfullpath))
   
-  (define copyref-copied-meta (copy "" copyref-copiedfile #:copy-ref copyref))
+  (define copyref-copied-meta (copy "" copyref-copiedfullpath #:copy-ref copyref))
   (define copyref-copied-search-meta 
-    (filter-search-by-exact-match copyref-copiedfile
+    (filter-search-by-exact-match copyref-copiedfullpath
                                   (search remote-dir copyref-copied-file)))
   
   (check-false (null? copyref-copied-search-meta))
@@ -198,21 +192,18 @@
   
   ;; moving ------------------------------
   (define moved-file (string-append "MOVED" remote-file))
-  (define movedfile 
+  (define movedfullpath 
     (if (string=? remote-dir "")
         moved-file
         (string-append remote-dir "/" moved-file)))
 
   ;; delete move target if it's already there
-;  (define moved-check
-;    (filter-search-by-exact-match movedfile (search remote-dir moved-file)))
-;  (unless (null? moved-check) (delete movedfile))
   (when (exists? remote-dir moved-file)
-    (delete movedfile))
+    (delete movedfullpath))
 
-  (define moved-meta (move copiedfile movedfile))
+  (define moved-meta (move copiedfullpath movedfullpath))
   (define moved-search-meta 
-    (filter-search-by-exact-match movedfile (search remote-dir moved-file)))
+    (filter-search-by-exact-match movedfullpath (search remote-dir moved-file)))
   
   (check-false (null? moved-search-meta))
   
@@ -221,19 +212,19 @@
    equal-to:    orig-size)
   
   ;; cleanup
-  (delete copyref-copiedfile)
-  (delete movedfile)
+  (delete copyref-copiedfullpath)
+  (delete movedfullpath)
   
   ;; check share urls ------------------------------
   ;; example: http://db.tt/JST2Phny
   (define share-url-short 
-    (string->url (hash-ref (get-share-url remotefile) 'url)))
+    (string->url (hash-ref (get-share-url remotefullpath) 'url)))
   ;; https://www.dropbox.com/s/4ny073s2zeomkw7/dropbox.pdf
   (define share-url 
-    (string->url (hash-ref (get-share-url remotefile #:short-url "false") 'url)))
+    (string->url (hash-ref (get-share-url remotefullpath #:short-url "false") 'url)))
   ;; https://dl.dropbox.com/0/view/znoemp4dlzoyb1n/Apps/Racket%20Test%20App/dropbox.pdf
   (define media-url 
-    (string->url (hash-ref (get-media-url remotefile) 'url)))
+    (string->url (hash-ref (get-media-url remotefullpath) 'url)))
   
   (check-equal? (url-scheme share-url-short) "http")
   (check-equal? (url-scheme share-url) "https")
@@ -255,7 +246,7 @@
   (check-false (file-exists? localfile))
   
   ;; now download file
-  (download-file remotefile localfile #:exists 'replace)
+  (download-file remotefullpath localfile #:exists 'replace)
   (define new-size (file-size localfile))
   (define new-sha1 (call-with-input-file localfile sha1))
   
@@ -263,8 +254,8 @@
   (check-equal? orig-sha1 new-sha1)
 
   ;; deleting ------------------------------
-  (define deleted-meta (delete remotefile))
-  (define deleted-meta-from-revlst (first (get-revisions remotefile)))
+  (define deleted-meta (delete remotefullpath))
+  (define deleted-meta-from-revlst (first (get-revisions remotefullpath)))
   
   (check-field-equal: rev
    in-metas:          deleted-meta deleted-meta-from-revlst)
@@ -278,8 +269,8 @@
    in-metas:              meta deleted-meta)
  
   ;; restoring ------------------------------
-  (define restored-meta (restore-file remotefile up-rev))
-  (define restored-meta-from-revlst (first (get-revisions remotefile)))
+  (define restored-meta (restore-file remotefullpath up-rev))
+  (define restored-meta-from-revlst (first (get-revisions remotefullpath)))
 
   (check-field-not-equal: rev
    in-metas:              restored-meta deleted-meta)
@@ -296,7 +287,7 @@
   (delete-file localfile)
   (check-false (file-exists? localfile))
   
-  (download-file remotefile localfile #:exists 'replace)
+  (download-file remotefullpath localfile #:exists 'replace)
   (define new-size2 (file-size localfile))
   (define new-sha12 (call-with-input-file localfile sha1))
   
@@ -304,21 +295,21 @@
   (check-equal? orig-sha1 new-sha12)
   
   ;; delete again
-  (delete remotefile)
+  (delete remotefullpath)
 
   ;; other checks ------------------------------
   (check-field: path
    in-metas: uploaded-meta uploaded-meta-from-revlst meta 
              deleted-meta deleted-meta-from-revlst
              restored-meta restored-meta-from-revlst
-   equal-to: (string-append "/" remotefile))
+   equal-to: (string-append "/" remotefullpath))
   
 
   )
 
 ;; test upload to app root dir
-;(do-upload/download-test PDF-PATH PDF-FILE)
-;(do-upload/download-test PNG-PATH PNG-FILE)
+(do-upload/download-test PDF-PATH PDF-FILE)
+(do-upload/download-test PNG-PATH PNG-FILE)
 ;(do-upload/download-test BIG-PATH BIG-FILE)
 #;(do-upload/download-test BIG-PATH BIG-FILE #:large-file? #t)
 
