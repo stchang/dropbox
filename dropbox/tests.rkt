@@ -109,12 +109,13 @@
 ;; upload/download test fn
 (define (do-upload/download-test localfile remote-file
                                  #:remote-dir [remote-dir ""]
-                                 #:large-file? [large-file? #f])
+                                 #:large-file? [large-file? #f]
+                                 #:no-sha1? [no-sha1? #f])
   (define remotefullpath (if (string=? remote-dir "")
                          remote-file
                          (string-append remote-dir "/" remote-file)))
   (define orig-size (file-size localfile))
-  (define orig-sha1 (call-with-input-file localfile sha1))
+  (define orig-sha1 (if no-sha1? "" (call-with-input-file localfile sha1)))
 
   (unless (string=? remote-dir "")
     (if (null? (search "" remote-dir))
@@ -248,7 +249,7 @@
   ;; now download file
   (download-file remotefullpath localfile #:exists 'replace)
   (define new-size (file-size localfile))
-  (define new-sha1 (call-with-input-file localfile sha1))
+  (define new-sha1 (if no-sha1? "" (call-with-input-file localfile sha1)))
   
   (check-equal? orig-size new-size)
   (check-equal? orig-sha1 new-sha1)
@@ -289,7 +290,7 @@
   
   (download-file remotefullpath localfile #:exists 'replace)
   (define new-size2 (file-size localfile))
-  (define new-sha12 (call-with-input-file localfile sha1))
+  (define new-sha12 (if no-sha1? "" (call-with-input-file localfile sha1)))
   
   (check-equal? orig-size new-size2)
   (check-equal? orig-sha1 new-sha12)
@@ -310,45 +311,24 @@
 ;; test upload to app root dir
 (do-upload/download-test PDF-PATH PDF-FILE)
 (do-upload/download-test PNG-PATH PNG-FILE)
-;(do-upload/download-test BIG-PATH BIG-FILE)
-#;(do-upload/download-test BIG-PATH BIG-FILE #:large-file? #t)
+(do-upload/download-test BIG-PATH BIG-FILE)
+(do-upload/download-test BIG-PATH BIG-FILE #:large-file? #t)
 
 ;; test upload to app subdir
 (do-upload/download-test PDF-PATH PDF-FILE #:remote-dir TEST-DIR)
 (do-upload/download-test PNG-PATH PNG-FILE #:remote-dir TEST-DIR)
-;(do-upload/download-test BIG-PATH BIG-FILE #:remote-dir TEST-DIR)
-#;(do-upload/download-test BIG-PATH BIG-FILE #:remote-dir TEST-DIR
-                                            #:large-file? #t)
+(do-upload/download-test BIG-PATH BIG-FILE #:remote-dir TEST-DIR)
+(do-upload/download-test BIG-PATH BIG-FILE #:remote-dir TEST-DIR
+                                           #:large-file? #t)
 
 ;; not sure how to test these
 #;(get-delta)
 #;(get-image-thumbnail "xmas.jpg" "xmas-thumb.jpg" 
                        #:size "s" #:exists 'replace)
 ;; interrupted chunk upload
-
-
-
-#;(get-copy-ref "lazyinf.pdf")
-
-;(upload-file "test-files/maine.jpg" "maine.jpg")
-
-;(upload-large-file "test-files/xmas.jpg" "xmas.jpg")
-#;(download-file "xmas.jpg" "xmas.jpg")
-;(get-copy-ref "xmas.jpg")
-;(copy "xmas.jpg" "xmas2.jpg")
-;(copy "xmas.jpg" "xmas2.jpg" #:copy-ref "DL38wjBoYW4xdnh2cGhmcA")
-;(copy "test" "test2")
-
-;(create-folder "new-folder")
-;(delete "new-folder")
-;(delete "test2")
-;(delete "xmas2.jpg")
-
-;(move "xmas.jpg" "xmasss.jpg")
-#;(define res
-  #;(upload-large-file "test-files/xmas.jpg" "xmas.jpg" 
+#;(upload-large-file "test-files/xmas.jpg" "xmas.jpg" 
                      #:verbose? #t 
 ;                   #:resume? #t 
 ;                   #:resume-id "izFM0xvusanQhT7Sn4BAxA"
 ;                   #:resume-offset 8388608
-                     ))
+                     )
