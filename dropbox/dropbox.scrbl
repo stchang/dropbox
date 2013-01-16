@@ -18,26 +18,25 @@ Dropbox SDK for Racket. Requires Racket version 5.3.1.12 or later.
 
 @section[#:tag "authentication"]{OAuth authentication}
 
-A Dropbox app must first get authentication to access a user's files. This is done in several steps.
+A Dropbox app must first get authorization to access a user's files. This is done in several steps.
 
 @#reader scribble/comment-reader
 (racketblock
-  ;; 1) Set the app's key and key secret. 
-  ;;    These will be used when obtaining request and access tokens.
+  ;; 1) Set the app's key, secret, and access type. 
+  ;;    "app_folder" access gives limited access while "dropbox" access
+  ;;    allows access to the user's entire dropbox account. The access type
+  ;;    must match the access level of the app.
+  ;;    These values will be used in subsequent steps.
   (set!-APP-KEY "3ysfqt0flcbex2t")
   (set!-APP-SECRET "hia6gkco347zczj")
+  (set!-ACCESS-TYPE "app_folder")
   
-  ;; 2) Get a request token. 
-  ;;    The obtained request token and token secret are automatically saved
-  ;;    internally and used to generate the authorization url and obtain the
-  ;;    access token.
-  (obtain-request-token)
-  
-  ;; 3) Direct the user to a browser pointed at the authorization url returned
-  ;;    by get-authorization-url.
+  ;; 2) Direct the user to a browser pointed at the authorization url returned
+  ;;    by get-authorization-url. This can only be done if the app key and
+  ;;    app secret are set.
   (get-authorization-url)
   
-  ;; 4) Get an access token. 
+  ;; 3) Get an access token. 
   ;;    This can only be done after the user grants access at the authorization
   ;;    url returned by get-authorization-url. The obtained access token and 
   ;;    token secret are automatically saved internally and sent as 

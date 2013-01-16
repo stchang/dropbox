@@ -8,10 +8,13 @@
 ;; TODO:
 ;; [o] = open, [x] = closed
 ;;
+;; [x] 2013-01-15: combine obtain-request-token and get-authorization-url into
+;;                 one step and don't provide obtain-request-token
+;;  - DONE 2013-01-15
 ;; [x] 2013-01-07: support locale
 ;; Add an optional parameter to functions of API calls that support
 ;; a locale parameter.
-;; - DONE 2013-01-07
+;;  - DONE 2013-01-07
 ;; [o] 2013-01-07: fix POST file uploading (ie upload-file-post function)
 ;;     This is low priority since POST uploading is not recommended by
 ;;     dropbox.
@@ -33,7 +36,7 @@
          set!-ACCESS-TYPE
          
          ;; oauth authentication
-         obtain-request-token
+         ;obtain-request-token
          get-authorization-url
          obtain-access-token
          
@@ -81,7 +84,7 @@
 ;; Utility functions
 ;; ----------------------------------------------------------------------------
 
-;; returns a url to the specified dropbox api call
+;; Returns a url to the specified dropbox api call
 ;; mk-api-url : string -> url
 (define (mk-api-url api-call [params #f])
   (string->url 
@@ -90,8 +93,8 @@
                       (string-append "?" params)
                       ""))))
 
-;; returns a url to the specified dropbox api call
-;; uses api-content.dropbox.com instead of api.dropbox
+;; Returns a url to the specified dropbox api call
+;; uses api-content.dropbox.com instead of api.dropbox.com
 ;; mk-api-content-url : string -> url
 (define (mk-api-content-url api-call [params #f])
   (string->url 
@@ -100,12 +103,17 @@
                       (string-append "?" params)
                       ""))))
 
+;; Returns the root path corresponding to the current access type.
+;; Possible return values are "dropbox" or "sandbox".
+;; This is needed by many of the Dropbox api calls.
+;; - access type "dropbox" returns root "dropbox"
+;; - otherwise, the returned root is "sandbox"
 (define (get-root)
   (if (string=? ACCESS-TYPE "dropbox")
       "dropbox"
       "sandbox"))
 
-;; returns params formatted with = and &
+;; Returns params formatted with = and &
 ;; ie (format-params "param1" "val1" "param2" "val2")
 ;;     => "param1=val1&param2=val2"
 ;; format-params : -> string
@@ -124,9 +132,11 @@
 
 ;; ----------------------------------------------------------------------------
 ;; OAUTH authentication functions
-;; Step 1) call obtain-request-token
-;; Step 2) go to url returned by get-authorization-url and grant access
-;; Step 3) call obtain-access-token
+;; Step 1) Go to url returned by get-authorization-url and grant access.
+;;         get-authorization-url first gets a request token based on the 
+;;         current app-key and app-secret (set via set!-APP-KEY and 
+;;                                                 set!-APP-SECRET)
+;; Step 2) Call obtain-access-token.
 ;; ----------------------------------------------------------------------------
 
 ;; User should ignore these initial tokens/secrets and get their own.
@@ -169,6 +179,9 @@
 ;; Step 2 of OAuth authentication process
 (define (get-authorization-url #:locale [locale DEFAULT-LOCALE] 
                                #:callback [callback-url AUTH-URL-BASE])
+  ;; First, get a request token. This sets OAUTH-REQUEST-TOKEN and 
+  ;;                                       OAUTH-REQUEST-SECRET.
+  (obtain-request-token)
   (define params (format-params "oauth_token" OAUTH-REQUEST-TOKEN
                                 "oauth_callback" callback-url
                                 "locale" locale))

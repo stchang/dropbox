@@ -9,13 +9,15 @@
 ;; ----------------------------------------------------------------------------
 ;; These tests use the Dropbox app "Racket Test App"
 ;; (created at https://www.dropbox.com/developers/apps),
-;; with the following app-key and app-secret:
+;; with the following app-key, app-secret:
 
 ;(set!-APP-KEY "3ysfqt0flcbex2t")
 ;(set!-APP-SECRET "hia6gkco347zczj")
 
-;; Also, these tests are only for "app_folder" (ie, limited) access type
-;; and not "dropbox" (ie, full) access.
+;; This app only grants "app_folder" (ie, limited) access 
+;; (and not "dropbox" (ie, full) access).
+;(set!-ACCESS-TYPE "app_folder")
+
 
 ;; ----------------------------------------------------------------------------
 ;; App has been granted access using the recommended OAuth authentication process:
@@ -25,11 +27,15 @@
 ;; The authenication tokens are hardcoded as the default values in dropbox.rkt
 ;; and subsequent API calls will use these credentials
 
-(define OAUTH-REQUEST-TOKEN "uk264rf6wc0lyte")
+;(define OAUTH-REQUEST-TOKEN "uk264rf6wc0lyte")
 
-;(obtain-request-token)
-
-(check-equal?
+;; 2013-01-15: 
+;; Removed this test after adding obtain-request-token to
+;; get-authorization-url. Can't do this test because a call to 
+;; get-authorization-url would get a new request token, but I want to use the
+;; one already hardcoded into file (ie, already authorized).
+;;             
+#;(check-equal?
  (get-authorization-url #:callback "http://yahoo.com")
  (string-append "https://www.dropbox.com/1/oauth/authorize"
                 "?"
