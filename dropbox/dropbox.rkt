@@ -8,6 +8,13 @@
 ;; TODO:
 ;; [o] = open, [x] = closed
 ;;
+;; [x] 2013-01-16: remove upload-file and rename upload-large-file to 
+;;                 upload-file
+;;  - DONE 2013-01-16
+;; [x] 2013-01-16: add return-resume-info-on-error to upload-large-file 
+;;                 parameter -- on error, instead of a resumption thunk,
+;;                 returns upload id and offset to be used for manual resume
+;;  - DONE 2013-01-16
 ;; [x] 2013-01-15: combine obtain-request-token and get-authorization-url into
 ;;                 one step and don't provide obtain-request-token
 ;;  - DONE 2013-01-15
@@ -56,7 +63,7 @@
          get-media-url
          get-copy-ref
          get-image-thumbnail
-         upload-large-file
+         ;upload-large-file
          
          ;; file ops
          copy
@@ -263,7 +270,7 @@
 ;; uses PUT to upload a file (recommended over upload-file-post)
 ;; remote-filepath should be a remote file name and NOT a directory
 ;; max filesize = 150mb
-(define (upload-file local-filepath remote-filepath 
+#;(define (upload-file local-filepath remote-filepath 
                      #:locale [locale DEFAULT-LOCALE] 
                      #:overwrite? [overwrite? "true"]
                      #:parent-rev [parent-rev ""])
@@ -287,7 +294,7 @@
 ;; max filesize = 150mb (use upload-large-file for > 150mb)
 ;; TODO: this isn't working -- how to include parameters as part of request url
 ;;       (must be signed like OAuth request URL)
-(define (upload-file-post local-filepath remote-filepath 
+#;(define (upload-file-post local-filepath remote-filepath 
                           #:locale [locale DEFAULT-LOCALE] 
                           #:overwrite? [overwrite? "true"]
                           #:parent-rev [parent-rev ""])
@@ -450,15 +457,17 @@
   (close-output-port out)
   (close-input-port p))
 
-;; uploads a file larger than 150mb
+;; uploads a file using chunk uploading
 ;; remote-filepath should be a remote file name and NOT a directory
 ;; #:chunk-size is in bytes (default = 4mb chunks)
-(define (upload-large-file local-filepath remote-filepath 
+(define (upload-file local-filepath remote-filepath 
                            #:locale [locale DEFAULT-LOCALE] 
                            #:overwrite? [overwrite? "true"]
                            #:parent-rev [parent-rev ""]
                            #:chunk-size [chunk-size 4194304]
                            #:verbose? [verbose? #f]
+                           #:return-resume-info-on-error? 
+                           [return-resume-info-on-error? #f]
                            #:resume? [resume? #f]
                            #:resume-id [resume-id ""]
                            #:resume-offset [resume-offset 0])
@@ -471,23 +480,29 @@
     (set! upload-id resume-id)
     (set! offset resume-offset)
     (read-bytes offset in)) ; skip these bytes
-  (let LOOP ([chunk (read-bytes chunk-size in)])
+  (let LOOP ([chunk (read-bytes chunk-size in)]) ; read next chunk
     (with-handlers 
+        ;; on error, return thunk that resumes the upload
         ([exn:fail:network:errno? 
           (λ _ 
             (when verbose?
               (printf "Network connection lost. Returning resume thunk.\n"))
-            (thunk 
-             (upload-large-file local-filepath remote-filepath
-                                #:locale locale
-                                #:overwrite? overwrite?
-                                #:parent-rev parent-rev
-                                #:chunk-size chunk-size
-                                #:verbose? verbose?
-                                #:resume? #t
-                                #:resume-id upload-id
-                                #:resume-offset offset)))])
+            (if return-resume-info-on-error?
+                (list upload-id offset)
+                (thunk 
+                 (upload-file local-filepath remote-filepath
+                              #:locale locale
+                              #:overwrite? overwrite?
+                              #:parent-rev parent-rev
+                              #:chunk-size chunk-size
+                              #:verbose? verbose?
+                              #:return-resume-info-on-error?
+                              return-resume-info-on-error?
+                              #:resume? #t
+                              #:resume-id upload-id
+                              #:resume-offset offset))))])
     (if (eof-object? chunk)
+        ;; no more chunks so commit the upload
         (let ([params (format-params "locale" locale
                                      "overwrite" overwrite?
                                      "parent_rev" parent-rev
@@ -506,6 +521,7 @@
             (printf "Chunk upload completed, id = ~a\n" upload-id))
           (close-input-port p)
           jsexp)
+        ;; otherwise, upload the chunk
         (let ([params (if upload-id
                           (format-params "upload_id" upload-id
                                          "offset" (number->string offset))
@@ -526,7 +542,7 @@
             (printf "Chunk uploaded: bytes ~a to ~a\n" 
                     offset (hash-ref jsexp 'offset)))
           (set! offset (hash-ref jsexp 'offset))
-          (LOOP (read-bytes chunk-size in))))))
+          (LOOP (read-bytes chunk-size in)))))) ; read next chunk
   )
 
 ;; ----------------------------------------------------------------------------

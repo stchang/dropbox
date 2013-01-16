@@ -115,7 +115,6 @@
 ;; upload/download test fn
 (define (do-upload/download-test localfile remote-file
                                  #:remote-dir [remote-dir ""]
-                                 #:large-file? [large-file? #f]
                                  #:no-sha1? [no-sha1? #f])
   (define remotefullpath (if (string=? remote-dir "")
                          remote-file
@@ -133,9 +132,7 @@
   ;; uploading ------------------------------
   ;; save revision number
   (define uploaded-meta 
-    (if large-file?
-        (upload-large-file localfile remotefullpath #:overwrite? "true")
-        (upload-file localfile remotefullpath #:overwrite? "true")))
+    (upload-file localfile remotefullpath #:overwrite? "true"))
   (check-true (jsexpr? uploaded-meta)) ;; check not thunk (ie upload completed)
   (define uploaded-meta-from-revlst (first (get-revisions remotefullpath)))
   (define up-rev (hash-ref uploaded-meta 'rev))
@@ -322,14 +319,11 @@
 (do-upload/download-test PDF-PATH PDF-FILE)
 (do-upload/download-test PNG-PATH PNG-FILE)
 (do-upload/download-test BIG-PATH BIG-FILE)
-(do-upload/download-test BIG-PATH BIG-FILE #:large-file? #t)
 
 ;; test upload to app subdir
 (do-upload/download-test PDF-PATH PDF-FILE #:remote-dir TEST-DIR)
 (do-upload/download-test PNG-PATH PNG-FILE #:remote-dir TEST-DIR)
 (do-upload/download-test BIG-PATH BIG-FILE #:remote-dir TEST-DIR)
-(do-upload/download-test BIG-PATH BIG-FILE #:remote-dir TEST-DIR
-                                           #:large-file? #t)
 
 ;; not sure how to test these
 #;(get-delta)

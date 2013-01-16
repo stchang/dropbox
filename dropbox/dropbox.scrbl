@@ -56,10 +56,6 @@ A Dropbox app must first get authorization to access a user's files. This is don
   Sets the access level type for your Dropbox app. This is set when creating the app @hyperlink["https://www.dropbox.com/developers/apps"]{here}. Possible values are @racket["app_folder"] (limited access) or @racket["dropbox"] (full access). More info on access levels @hyperlink["https://www.dropbox.com/developers/start/core"]{here}.
 }
 
-@defproc[(obtain-request-token) (values string? string?)]{
-  Step 1 of OAuth authentication. Gets a request token and request token secret and saves it internally. Also returns the obtained request token and request token secret.
-}
-
 @defproc[(get-authorization-url [#:locale locale string? "en"]
                                 [#:callback callback-url string? "https://www.dropbox.com/1/oauth/authorize"]) string?]{
   Step 2 of OAuth authentication. Returns a url in string form. Direct the app user to this page to grant the app access to the user's files. Takes an optional @hyperlink["https://www.dropbox.com/developers/reference/api#param.locale"]{locale} parameter and callback url to display after the user grants access.
@@ -91,23 +87,18 @@ A Dropbox app must first get authorization to access a user's files. This is don
                       [remote-filepath string?]
                       [#:locale locale string? "en"]
                       [#:overwrite? overwrite? (or/c "true" "false") "true"]
-                      [#:parent-rev parent-rev string? ""]) jsexpr?]{
-  Uploads a file less than 150MB. Use @racket[upload-large-file] for larger files. Both @racket[local-filepath] and @racket[remote-filepath] must be files and not directories. When @racket[parent-rev] is specified, the file will be replaced only if the latest version matches. Otherwise, the file will be renamed.
-}
-                                                                    
-@defproc[(upload-large-file [local-filepath string?]
-                            [remote-filepath string?]
-                            [#:locale locale string? "en"]
-                            [#:overwrite? overwrite? (or/c "true" "false") "true"]
-                            [#:parent-rev parent-rev string? ""]
-                            [#:chunk-size chunk-size number? 4194304]
-                            [#:verbose? verbose? boolean? #f]
-                            [#:resume? resume? boolean? #f]
-                            [#:resume-id resume-id string? ""]
-                            [#:resume-offset resume-offset number? 0]) (or/c jsexpr? thunk?)]{
-  Uploads a file in chunks. Default @racket[chunk-size] is 4MB. Use this function to upload files greater than 150MB. When @racket[verbose?] is @racket[#t], the progress is printed as each chunk completes.
+                      [#:parent-rev parent-rev string? ""]
+                      [#:chunk-size chunk-size number? 4194304]
+                      [#:verbose? verbose? boolean? #f]
+                      [#:return-resume-info-on-error? 
+                       return-resume-info-on-error? boolean? #f]
+                      [#:resume? resume? boolean? #f]
+                      [#:resume-id resume-id string? ""]
+                      [#:resume-offset resume-offset number? 0])
+         (or/c jsexpr? thunk? (list string? number?))]{
+  Uploads a file. Both @racket[local-filepath] and @racket[remote-filepath] must be files and not directories. When @racket[parent-rev] is specified, it will be replaced only if latest version matches the upload; otherwise, the remote file will be renamed first. The file is uploaded in chunks. Default @racket[chunk-size] is 4MB. When @racket[verbose?] is @racket[#t], the progress is printed as each chunk completes.
                                     
-If an upload is interrupted due to network outage, a thunk is returned that resumes the upload when evaluated. Alternatively, an upload can be manually resumed by setting @racket[resumed?] to @racket[#t] and giving the appropriate @racket[resume-id] and @racket[resume-offset] (set @racket[verbose?] to @racket[#t] to get this information).
+If an upload is interrupted due to network outage, a thunk is returned that resumes the upload when evaluated, unless @racket[return-resume-info-on-error?] is @racket[#t], in which case a list containing a @racket[resume-id] string and @racket[resume-offset] number is returned. To manually resume an upload, set @racket[resumed?] to @racket[#t] and give the appropriate @racket[resume-id] and @racket[resume-offset].
 
 When the upload completes successfully, a @tech{jsexpr} is returned with the metadata of the uploaded file.
 }
