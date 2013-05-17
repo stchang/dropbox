@@ -9,6 +9,7 @@ Racket can be downloaded [here](http://racket-lang.org/).
 
 To install, use Racket's raco command line tool: `raco pkg install dropbox`
 
-[documentation (github hosted)](http://stchang.github.io/dropbox/dropbox.html)
-[documentation (planet1 hosted) (may be outdated)](http://planet.racket-lang.org/package-source/stchang/dropbox.plt/2/0/planet-docs/dropbox/index.html)
+[documentation](http://stchang.github.io/dropbox/dropbox.html) (github hosted)
+
+[documentation](http://planet.racket-lang.org/package-source/stchang/dropbox.plt/2/0/planet-docs/dropbox/index.html) (planet1 hosted --- may be outdated)
 
