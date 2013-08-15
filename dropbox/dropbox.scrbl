@@ -10,7 +10,7 @@
 @(define the-eval (make-base-eval))
 @(the-eval '(require "dropbox.rkt"))
 
-@defmodule[dropbox]
+@defmodule[dropbox #:use-sources ("dropbox.rkt")]
 
 @author[@author+email["Stephen Chang" "stchang@racket-lang.org"]]
 
